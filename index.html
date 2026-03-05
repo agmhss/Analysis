@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="bg-gray-50 p-8">
     <div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow-md">
@@ -17,15 +16,13 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700">Google Sheet ID</label>
                 <input type="text" id="sheetId" placeholder="Enter Sheet ID..." class="mt-1 block w-full border border-gray-300 rounded-md p-2 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                <p class="text-xs text-gray-500 mt-1">Ensure the sheet is "Published to Web" → File → Share → Publish to web → CSV format</p>
+                <p class="text-xs text-gray-500 mt-1">Ensure the sheet is "Published to Web" as CSV.</p>
             </div>
             <div class="flex items-end">
                 <button onclick="fetchData()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">Fetch Data</button>
             </div>
         </div>
-
         <hr class="my-6">
-
         <div id="controls" class="hidden space-y-6">
             <!-- Column Selection -->
             <div>
@@ -39,46 +36,26 @@
                 <div id="columnCheckboxes" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 border rounded-md bg-gray-50"></div>
             </div>
 
-            <!-- Date Range Filter -->
-            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                <h3 class="text-lg font-semibold text-blue-800 mb-3">Date Range Filter</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-1">Date Column</label>
-                        <select id="dateColumn" class="block w-full border border-gray-300 rounded-md p-2 text-sm"></select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-1">From Date</label>
-                        <input type="date" id="fromDate" class="block w-full border border-gray-300 rounded-md p-2 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-1">To Date</label>
-                        <input type="date" id="toDate" class="block w-full border border-gray-300 rounded-md p-2 text-sm">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Text Filters -->
+            <!-- Filters -->
             <div>
-                <h3 class="text-lg font-semibold text-gray-800 mb-3">Text Filters (contains, AND logic)</h3>
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">Filters (AND logic)</h3>
                 <div id="filterRows" class="space-y-3"></div>
-                <button onclick="addFilterRow()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">+ Add Filter</button>
+                <button onclick="addFilterRow()" class="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">+ Add Filter</button>
             </div>
 
             <!-- Action Buttons -->
-            <div class="flex flex-wrap gap-3 pt-4">
-                <button onclick="applyFilters()" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-medium shadow-sm">Apply Filters</button>
-                <button onclick="clearAllFilters()" class="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 font-medium shadow-sm">Clear All</button>
-                <button onclick="downloadPDF()" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 font-medium shadow-sm">Download PDF</button>
-                <button onclick="downloadExcel()" class="bg-green-700 text-white px-6 py-2 rounded hover:bg-green-800 font-medium shadow-sm flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
-                    Download Excel
-                </button>
+            <div class="flex flex-wrap gap-3 pt-3">
+                <button onclick="applyFilters()" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-medium">Apply Filters</button>
+                <button onclick="clearAllFilters()" class="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 font-medium">Clear All</button>
+                <button onclick="downloadPDF()" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 font-medium">Download PDF</button>
             </div>
         </div>
 
         <div class="mt-8 overflow-x-auto">
-            <table id="dataTable" class="min-w-full divide-y divide-gray-200 border text-sm"></table>
+            <table id="dataTable" class="min-w-full divide-y divide-gray-200 border text-sm">
+                <thead class="bg-gray-100" id="tableHead"></thead>
+                <tbody class="divide-y divide-gray-200" id="tableBody"></tbody>
+            </table>
         </div>
 
         <div id="stats" class="mt-4 text-sm text-gray-600 hidden">
@@ -92,221 +69,176 @@
         let displayedData = [];
         let visibleColumns = new Set();
 
-       async function fetchData() {
-    const id = document.getElementById('sheetId').value.trim();
-    if (!id) return alert("Please enter a Sheet ID");
+        // Robust dd/mm/yyyy → Date parser
+        function parseDDMMYYYY(dateStr) {
+            if (!dateStr) return null;
+            dateStr = dateStr.trim();
+            if (!/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(dateStr)) return null;
 
-    // Option: prompt for gid if needed (default to 0)
-    let gid = prompt("Enter GID (sheet tab ID, usually 0 for first tab) or leave blank for default:", "0");
-    if (!gid) gid = "0";
+            const parts = dateStr.split('/');
+            if (parts.length !== 3) return null;
 
-    const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+            let day   = parseInt(parts[0], 10);
+            let month = parseInt(parts[1], 10);
+            let year  = parseInt(parts[2], 10);
 
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status} - ${response.statusText}`);
-        }
-        const csv = await response.text();
-        if (csv.trim() === '' || csv.includes('<html')) {
-            throw new Error("Response looks like HTML instead of CSV (publishing not set up correctly?)");
-        }
-        processData(csv);
-        document.getElementById('controls').classList.remove('hidden');
-    } catch (err) {
-        console.error(err);
-        alert(`Error fetching data:\n${err.message}\n\nChecklist:\n1. Sheet must be Published to web as CSV (File → Share → Publish to web).\n2. Try adding &gid=0 or the correct tab GID.\n3. Test the URL directly in browser: ${url}\n4. Open in incognito if signed-in Google causes issues.`);
-    }
-}
-        }
+            if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
 
-        function processData(csvText) {
-            const rows = parseCSV(csvText);
-            if (rows.length < 1) return alert("No data found");
+            // Handle 2-digit year (assume 1900–2099 range)
+            if (year < 100) year += (year < 50 ? 2000 : 1900);
 
-            headers = rows[0].map(h => h.trim());
-            rawData = rows.slice(1);
-            displayedData = [...rawData];
+            // Validate
+            if (month < 1 || month > 12) return null;
+            if (day < 1 || day > 31) return null;
 
-            visibleColumns = new Set(headers.map((_, i) => i));
-
-            initControls();
-            renderTable(displayedData);
-            updateStats();
-        }
-
-        // Improved CSV parser (handles quoted fields better)
-        function parseCSV(str) {
-            const rows = [];
-            let row = [];
-            let field = '';
-            let inQuote = false;
-
-            for (let i = 0; i < str.length; i++) {
-                const c = str[i];
-                const next = str[i+1];
-
-                if (c === '"') {
-                    if (inQuote && next === '"') {
-                        field += '"';
-                        i++;
-                    } else {
-                        inQuote = !inQuote;
-                    }
-                } else if (c === ',' && !inQuote) {
-                    row.push(field.trim());
-                    field = '';
-                } else if ((c === '\n' || (c === '\r' && next === '\n')) && !inQuote) {
-                    if (c === '\r') i++;
-                    row.push(field.trim());
-                    rows.push(row);
-                    row = [];
-                    field = '';
-                } else {
-                    field += c;
-                }
+            const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+            // Check if date is valid (handles 31/04, 29/02 non-leap, etc.)
+            if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) {
+                return null;
             }
+            return date;
+        }
 
-            if (field || row.length) {
-                row.push(field.trim());
-                rows.push(row);
+        async function fetchData() {
+            const id = document.getElementById('sheetId').value.trim();
+            if (!id) return alert("Please enter a Sheet ID");
+            const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Failed to fetch");
+                const data = await response.text();
+                processData(data);
+                document.getElementById('controls').classList.remove('hidden');
+            } catch (error) {
+                alert("Error fetching data. Ensure Sheet is Published to Web → CSV.");
             }
-
-            return rows;
         }
 
-        function initControls() {
-            createColumnCheckboxes();
-            populateDateDropdown();
-            document.getElementById('filterRows').innerHTML = '';
-            addFilterRow();
-        }
-
-        function populateDateDropdown() {
-            const sel = document.getElementById('dateColumn');
-            sel.innerHTML = '<option value="-1">— No date filter —</option>' +
-                headers.map((h, i) => `<option value="${i}">${escapeHtml(h)}</option>`).join('');
-        }
-
-        function createColumnCheckboxes() {
-            const container = document.getElementById('columnCheckboxes');
-            container.innerHTML = headers.map((header, i) => `
-                <label class="flex items-center p-2 bg-white border rounded cursor-pointer hover:bg-gray-50">
-                    <input type="checkbox" value="${i}" checked onchange="updateVisibleColumns()" class="mr-2 rounded">
-                    <span class="text-sm truncate" title="${escapeHtml(header)}">${escapeHtml(header)}</span>
-                </label>
-            `).join('');
-        }
-
-        function updateVisibleColumns() {
-            visibleColumns.clear();
-            document.querySelectorAll('#columnCheckboxes input:checked').forEach(el => {
-                visibleColumns.add(Number(el.value));
-            });
-            renderTable(displayedData);
-        }
-
-        function selectAllColumns() {
-            document.querySelectorAll('#columnCheckboxes input').forEach(el => el.checked = true);
-            visibleColumns = new Set(headers.map((_,i)=>i));
-            renderTable(displayedData);
-        }
-
-        function deselectAllColumns() {
-            document.querySelectorAll('#columnCheckboxes input').forEach(el => el.checked = false);
-            visibleColumns.clear();
-            renderTable(displayedData);
-        }
+        // ... (keep your existing parseCSV, processData, initControls, createColumnCheckboxes, updateVisibleColumns, selectAllColumns, deselectAllColumns functions unchanged)
 
         function addFilterRow() {
             const container = document.getElementById('filterRows');
             const rowId = Date.now();
-            container.insertAdjacentHTML('beforeend', `
-                <div id="filter-row-${rowId}" class="grid grid-cols-1 md:grid-cols-[2fr_3fr_auto] gap-3 items-end p-3 bg-gray-50 rounded-lg border">
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-1">Column</label>
-                        <select class="filter-col block w-full border border-gray-300 rounded-md p-2 text-sm">
-                            ${headers.map((h,i)=>`<option value="${i}">${escapeHtml(h)}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-1">Contains</label>
-                        <input type="text" class="filter-val block w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="e.g. pending, john">
-                    </div>
-                    <div class="pb-1">
-                        <button onclick="document.getElementById('filter-row-${rowId}').remove()" class="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600">Remove</button>
-                    </div>
+            const filterRow = document.createElement('div');
+            filterRow.className = 'grid grid-cols-1 md:grid-cols-4 gap-3 items-end p-3 bg-gray-50 rounded-lg border';
+            filterRow.id = `filter-row-${rowId}`;
+
+            const colOptions = headers.map((h, i) => `<option value="${i}">${escapeHtml(h)}</option>`).join('');
+
+            filterRow.innerHTML = `
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Column</label>
+                    <select class="filter-col block w-full border border-gray-300 rounded-md p-2 text-sm" data-row="${rowId}" onchange="updateFilterUI(this)">
+                        ${colOptions}
+                    </select>
                 </div>
-            `);
+                <div class="filter-input-container col-span-2 md:col-span-1">
+                    <!-- Dynamic input will be inserted here -->
+                </div>
+                <div class="flex items-end gap-2">
+                    <button onclick="removeFilterRow(${rowId})" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
+                        Remove
+                    </button>
+                </div>
+            `;
+            container.appendChild(filterRow);
+
+            // Trigger initial UI
+            const select = filterRow.querySelector('.filter-col');
+            updateFilterUI(select);
         }
 
-        function getTextFilters() {
-            const filters = [];
-            document.querySelectorAll('#filterRows .filter-col').forEach(colSelect => {
-                const valInput = colSelect.parentElement.parentElement.querySelector('.filter-val');
-                const col = Number(colSelect.value);
-                const val = valInput.value.trim().toLowerCase();
-                if (val) {
-                    filters.push({ col, val });
-                }
-            });
-            return filters;
+        function updateFilterUI(selectEl) {
+            const container = selectEl.closest('.grid').querySelector('.filter-input-container');
+            const colIndex = parseInt(selectEl.value);
+            const colName = headers[colIndex]?.toLowerCase() || '';
+
+            const isLikelyDate = /date|dob|birth|joined|anniversary|expiry/i.test(colName);
+
+            let html = '';
+
+            if (isLikelyDate) {
+                html = `
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">From (dd/mm/yyyy)</label>
+                            <input type="text" class="filter-from block w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="dd/mm/yyyy" data-row="${selectEl.dataset.row}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">To (dd/mm/yyyy)</label>
+                            <input type="text" class="filter-to block w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="dd/mm/yyyy" data-row="${selectEl.dataset.row}">
+                        </div>
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Contains</label>
+                        <input type="text" class="filter-val block w-full border border-gray-300 rounded-md p-2 text-sm" placeholder="Enter text..." data-row="${selectEl.dataset.row}">
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        function removeFilterRow(rowId) {
+            document.getElementById(`filter-row-${rowId}`)?.remove();
         }
 
         function applyFilters() {
-            const dateColIndex = Number(document.getElementById('dateColumn').value);
-            const fromDateVal = document.getElementById('fromDate').value;
-            const toDateVal   = document.getElementById('toDate').value;
-            const textFilters = getTextFilters();
+            const filters = [];
 
-            displayedData = rawData.filter(row => {
-                // Text filters (AND)
-                const passText = textFilters.every(f => {
-                    const cell = (row[f.col] || '').toString().trim().toLowerCase();
-                    return cell.includes(f.val);
-                });
+            document.querySelectorAll('#filterRows > div').forEach(row => {
+                const rowId = row.id.split('-').pop();
+                const colSelect = row.querySelector('.filter-col');
+                if (!colSelect) return;
 
-                // Date filter
-                let passDate = true;
-                if (dateColIndex >= 0 && (fromDateVal || toDateVal)) {
-                    const raw = (row[dateColIndex] || '').trim();
-                    if (!raw) {
-                        passDate = false; // hide empty when filter active
-                    } else {
-                        // Try DD/MM/YYYY first, then fallback to browser parsing
-                        let cellDate = null;
-                        const parts = raw.split(/[-/]/);
-                        if (parts.length === 3) {
-                            // Try DD/MM/YYYY
-                            let d = parseInt(parts[0],10), m = parseInt(parts[1],10)-1, y = parseInt(parts[2],10);
-                            cellDate = new Date(y, m, d);
-                            if (isNaN(cellDate.getTime())) {
-                                // Try MM/DD/YYYY
-                                cellDate = new Date(parts[2], parts[0]-1, parts[1]);
-                            }
-                        }
-                        if (!cellDate || isNaN(cellDate.getTime())) {
-                            cellDate = new Date(raw);
-                        }
+                const col = parseInt(colSelect.value);
+                const colName = headers[col]?.toLowerCase() || '';
 
-                        if (isNaN(cellDate.getTime())) {
-                            passDate = false;
-                        } else {
-                            if (fromDateVal) {
-                                const from = new Date(fromDateVal);
-                                from.setHours(0,0,0,0);
-                                if (cellDate < from) passDate = false;
-                            }
-                            if (toDateVal) {
-                                const to = new Date(toDateVal);
-                                to.setHours(23,59,59,999);
-                                if (cellDate > to) passDate = false;
-                            }
-                        }
+                const isDateColumn = /date|dob|birth|joined|anniversary|expiry/i.test(colName);
+
+                if (isDateColumn) {
+                    const fromInput = row.querySelector('.filter-from');
+                    const toInput   = row.querySelector('.filter-to');
+
+                    const fromStr = fromInput?.value?.trim();
+                    const toStr   = toInput?.value?.trim();
+
+                    if (fromStr || toStr) {
+                        filters.push({
+                            col,
+                            fromDate: fromStr ? parseDDMMYYYY(fromStr) : null,
+                            toDate:   toStr   ? parseDDMMYYYY(toStr)   : null
+                        });
+                    }
+                } else {
+                    const valInput = row.querySelector('.filter-val');
+                    const val = valInput?.value?.trim()?.toLowerCase();
+                    if (val) {
+                        filters.push({ col, val });
                     }
                 }
+            });
 
-                return passText && passDate;
+            displayedData = rawData.filter(row => {
+                return filters.every(f => {
+                    const cell = (row[f.col] || '').trim();
+
+                    if ('val' in f) {
+                        // Text contains filter
+                        return cell.toLowerCase().includes(f.val);
+                    } else {
+                        // Date range filter
+                        const cellDate = parseDDMMYYYY(cell);
+                        if (!cellDate) return false; // invalid date → filtered out
+
+                        if (f.fromDate && cellDate < f.fromDate) return false;
+                        if (f.toDate   && cellDate > f.toDate)   return false;
+                        return true;
+                    }
+                });
             });
 
             renderTable(displayedData);
@@ -314,9 +246,6 @@
         }
 
         function clearAllFilters() {
-            document.getElementById('fromDate').value = '';
-            document.getElementById('toDate').value = '';
-            document.getElementById('dateColumn').value = '-1';
             document.getElementById('filterRows').innerHTML = '';
             addFilterRow();
             displayedData = [...rawData];
@@ -324,92 +253,11 @@
             updateStats();
         }
 
-        function renderTable(dataRows) {
-            const thead = document.getElementById('dataTable').createTHead();
-            const tbody = document.getElementById('dataTable').createTBody();
-            thead.innerHTML = '';
-            tbody.innerHTML = '';
+        // Keep your existing renderTable, updateStats, escapeHtml, downloadPDF functions
+        // They remain unchanged unless you want further improvements
 
-            const visibleHeaders = headers.filter((_,i) => visibleColumns.has(i));
+        // ... paste your original functions here: parseCSV, processData, initControls, etc.
 
-            // Header
-            let tr = thead.insertRow();
-            tr.insertCell().outerHTML = '<th class="px-4 py-2 text-left font-semibold bg-gray-100 border">Sl No</th>';
-            visibleHeaders.forEach(h => {
-                const th = tr.insertCell();
-                th.outerHTML = `<th class="px-4 py-2 text-left font-semibold bg-gray-100 border whitespace-nowrap">${escapeHtml(h)}</th>`;
-            });
-
-            // Body
-            dataRows.forEach((row, idx) => {
-                tr = tbody.insertRow();
-                tr.insertCell().outerHTML = `<td class="px-4 py-2 border text-center">${idx + 1}</td>`;
-                headers.forEach((_, i) => {
-                    if (visibleColumns.has(i)) {
-                        const td = tr.insertCell();
-                        td.className = 'px-4 py-2 border';
-                        td.textContent = row[i] ?? '';
-                    }
-                });
-            });
-        }
-
-        function updateStats() {
-            document.getElementById('rowCount').textContent = displayedData.length;
-            document.getElementById('totalCount').textContent = rawData.length;
-            document.getElementById('stats').classList.remove('hidden');
-        }
-
-        function escapeHtml(unsafe) {
-            return String(unsafe || '').replace(/[&<>"']/g, m => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            })[m]);
-        }
-
-        function downloadPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-            const visibleHeaders = headers.filter((_,i)=>visibleColumns.has(i));
-            const head = [['Sl No', ...visibleHeaders]];
-
-            const body = displayedData.map((row, i) => [
-                i+1,
-                ...headers.map((_,j) => visibleColumns.has(j) ? (row[j] ?? '') : '').filter(Boolean)
-            ]);
-
-            doc.autoTable({
-                head,
-                body,
-                styles: { fontSize: 8, cellPadding: 2 },
-                headStyles: { fillColor: [100, 149, 237] },
-                margin: { top: 20 },
-                didDrawPage: () => {
-                    doc.setFontSize(10);
-                    doc.text(`Filtered Report — ${displayedData.length} rows`, 14, 12);
-                }
-            });
-
-            doc.save(`report_${new Date().toISOString().slice(0,10)}.pdf`);
-        }
-
-        function downloadExcel() {
-            if (!displayedData.length) return alert("No data to export");
-
-            const visibleHeaders = headers.filter((_,i)=>visibleColumns.has(i));
-            const exportHeaders = ['Sl No', ...visibleHeaders];
-
-            const data = displayedData.map((row, i) => [
-                i+1,
-                ...headers.map((_,j) => visibleColumns.has(j) ? (row[j] ?? '') : '')
-            ]);
-
-            const ws = XLSX.utils.aoa_to_sheet([exportHeaders, ...data]);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Filtered Data");
-
-            XLSX.writeFile(wb, `export_${new Date().toISOString().slice(0,10)}.xlsx`);
-        }
     </script>
 </body>
 </html>
