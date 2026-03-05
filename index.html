@@ -92,19 +92,32 @@
         let displayedData = [];
         let visibleColumns = new Set();
 
-        async function fetchData() {
-            const id = document.getElementById('sheetId').value.trim();
-            if (!id) return alert("Please enter a Sheet ID");
+       async function fetchData() {
+    const id = document.getElementById('sheetId').value.trim();
+    if (!id) return alert("Please enter a Sheet ID");
 
-            const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=0`;
-            try {
-                const response = await fetch(url);
-                const csv = await response.text();
-                processData(csv);
-                document.getElementById('controls').classList.remove('hidden');
-            } catch (err) {
-                alert("Error: " + err.message + "\n\nMake sure:\n1. Sheet is published to web as CSV\n2. ID is correct");
-            }
+    // Option: prompt for gid if needed (default to 0)
+    let gid = prompt("Enter GID (sheet tab ID, usually 0 for first tab) or leave blank for default:", "0");
+    if (!gid) gid = "0";
+
+    const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+        }
+        const csv = await response.text();
+        if (csv.trim() === '' || csv.includes('<html')) {
+            throw new Error("Response looks like HTML instead of CSV (publishing not set up correctly?)");
+        }
+        processData(csv);
+        document.getElementById('controls').classList.remove('hidden');
+    } catch (err) {
+        console.error(err);
+        alert(`Error fetching data:\n${err.message}\n\nChecklist:\n1. Sheet must be Published to web as CSV (File → Share → Publish to web).\n2. Try adding &gid=0 or the correct tab GID.\n3. Test the URL directly in browser: ${url}\n4. Open in incognito if signed-in Google causes issues.`);
+    }
+}
         }
 
         function processData(csvText) {
