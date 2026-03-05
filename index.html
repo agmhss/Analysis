@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Sheet Data Retriever</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-50 p-8">
+
+    <div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800">Advanced Google Sheet Data Retriever</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Google Sheet ID</label>
+                <input type="text" id="sheetId" placeholder="Enter Sheet ID..." class="mt-1 block w-full border border-gray-300 rounded-md p-2 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                <p class="text-xs text-gray-500 mt-1">Ensure the sheet is "Published to Web" as CSV.</p>
+            </div>
+            <div class="flex items-end">
+                <button onclick="fetchData()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">Fetch Data</button>
+            </div>
+        </div>
+
+        <hr class="my-6">
+
+        <div id="controls" class="hidden space-y-6">
+            <div>
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-lg font-semibold text-gray-800">Column Selection</h3>
+                    <div class="space-x-2">
+                        <button onclick="selectAllColumns()" class="bg-green-600 text-white px-3 py-1 text-sm rounded hover:bg-green-700">Select All</button>
+                        <button onclick="deselectAllColumns()" class="bg-gray-600 text-white px-3 py-1 text-sm rounded hover:bg-gray-700">Deselect All</button>
+                    </div>
+                </div>
+                <div id="columnCheckboxes" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 border rounded-md bg-gray-50"></div>
+            </div>
+
+            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <h3 class="text-lg font-semibold text-blue-800 mb-3">Date Range Filter</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Date Column</label>
+                        <select id="dateColumn" class="block w-full border border-gray-300 rounded-md p-2 text-sm">
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">From Date</label>
+                        <input type="date" id="fromDate" class="block w-full border border-gray-300 rounded-md p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">To Date</label>
+                        <input type="date" id="toDate" class="block w-full border border-gray-300 rounded-md p-2 text-sm">
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">Text Filters (AND logic)</h3>
+                <div id="filterRows" class="space-y-2"></div>
+                <button onclick="addFilterRow()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">+ Add Filter</button>
+            </div>
+
+            <div class="flex flex-wrap gap-2 pt-2">
+                <button onclick="applyFilters()" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-medium shadow-sm">Apply All Filters</button>
+                <button onclick="clearAllFilters()" class="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 font-medium shadow-sm">Clear All</button>
+                <button onclick="downloadPDF()" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 font-medium shadow-sm">Download PDF</button>
+                <button onclick="downloadExcel()" class="bg-green-700 text-white px-6 py-2 rounded hover:bg-green-800 font-medium shadow-sm flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
+                    Download Excel (Google Sheet Compatible)
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-8 overflow-x-auto">
+            <table id="dataTable" class="min-w-full divide-y divide-gray-200 border text-sm">
+                <thead class="bg-gray-100" id="tableHead"></thead>
+                <tbody class="divide-y divide-gray-200" id="tableBody"></tbody>
+            </table>
+        </div>
+
+        <div id="stats" class="mt-4 text-sm text-gray-600 hidden">
+            Showing <span id="rowCount">0</span> of <span id="totalCount">0</span> rows
+        </div>
+    </div>
+
+    <script>
+        let rawData = [];
+        let headers = [];
+        let displayedData = [];
+        let visibleColumns = new Set();
+
+        // [Previous functions: fetchData, parseCSV, processData, initControls, etc. remain the same]
+        async function fetchData() {
+            const id = document.getElementById('sheetId').value.trim();
+            if (!id) return alert("Please enter a Sheet ID");
+            const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Failed to fetch");
+                const data = await response.text();
+                processData(data);
+                document.getElementById('controls').classList.remove('hidden');
+            } catch (error) {
+                alert("Error fetching data. Ensure the Sheet ID is correct and Published to Web.");
+            }
+        }
+
+        function parseCSV(csvText) {
+            const rows = [];
+            let currentRow = [];
+            let currentField = '';
+            let inQuotes = false;
+            for (let i = 0; i < csvText.length; i++) {
+                const char = csvText[i];
+                const nextChar = csvText[i + 1];
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') { currentField += '"'; i++; } 
+                    else { inQuotes = !inQuotes; }
+                } else if (char === ',' && !inQuotes) {
+                    currentRow.push(currentField.trim());
+                    currentField = '';
+                } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                    if (char === '\r' && nextChar === '\n') i++;
+                    currentRow.push(currentField.trim());
+                    rows.push(currentRow);
+                    currentRow = [];
+                    currentField = '';
+                } else { currentField += char; }
+            }
+            if (currentField || currentRow.length) {
+                currentRow.push(currentField.trim());
+                rows.push(currentRow);
+            }
+            return rows;
+        }
+
+        function processData(csvText) {
+            const rows = parseCSV(csvText);
+            if (rows.length === 0) return alert("No data found.");
+            headers = rows[0];
+            rawData = rows.slice(1);
+            displayedData = [...rawData];
+            visibleColumns = new Set(headers.keys());
+            initControls();
+            renderTable(displayedData);
+            updateStats();
+        }
+
+        function initControls() {
+            createColumnCheckboxes();
+            populateDateDropdown();
+            document.getElementById('filterRows').innerHTML = '';
+            addFilterRow();
+        }
+
+        function populateDateDropdown() {
+            const dateDropdown = document.getElementById('dateColumn');
+            dateDropdown.innerHTML = headers.map((h, i) => `<option value="${i}">${escapeHtml(h)}</option>`).join('');
+        }
+
+        function createColumnCheckboxes() {
+            const container = document.getElementById('columnCheckboxes');
+            container.innerHTML = headers.map((header, i) => `
+                <label class="flex items-center p-2 bg-white border rounded cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" value="${i}" checked onchange="updateVisibleColumns()" class="mr-2 rounded">
+                    <span class="text-sm truncate" title="${escapeHtml(header)}">${escapeHtml(header)}</span>
+                </label>
+            `).join('');
+        }
+
+        function updateVisibleColumns() {
+            visibleColumns.clear();
+            document.querySelectorAll('#columnCheckboxes input:checked').forEach(cb => visibleColumns.add(parseInt(cb.value)));
+            renderTable(displayedData);
+        }
+
+        function selectAllColumns() {
+            document.querySelectorAll('#columnCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = true);
+            visibleColumns = new Set(headers.keys());
+            renderTable(displayedData);
+        }
+
+        function deselectAllColumns() {
+            document.querySelectorAll('#columnCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+            visibleColumns.clear();
+            renderTable(displayedData);
+        }
+
+        function addFilterRow() {
+            const container = document.getElementById('filterRows');
+            const rowId = Date.now();
+            const filterRow = document.createElement('div');
+            filterRow.className = 'grid grid-cols-1 md:grid-cols-3 gap-2 items-end p-3 bg-gray-50 rounded-lg border';
+            filterRow.id = `filter-row-${rowId}`;
+            filterRow.innerHTML = `
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Column</label>
+                    <select class="filter-col block w-full border border-gray-300 rounded-md p-2 text-sm" data-row="${rowId}">
+                        ${headers.map((h, i) => `<option value="${i}">${escapeHtml(h)}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Value (contains)</label>
+                    <input type="text" class="filter-val block w-full border border-gray-300 rounded-md p-2 text-sm" data-row="${rowId}" placeholder="Enter filter text...">
+                </div>
+                <div>
+                    <button onclick="removeFilterRow(${rowId})" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Remove</button>
+                </div>
+            `;
+            container.appendChild(filterRow);
+        }
+
+        function removeFilterRow(rowId) {
+            const el = document.getElementById(`filter-row-${rowId}`);
+            if (el) el.remove();
+        }
+
+        function applyFilters() {
+            const fromDateVal = document.getElementById('fromDate').value;
+            const toDateVal = document.getElementById('toDate').value;
+            const dateColIndex = parseInt(document.getElementById('dateColumn').value);
+            const textFilters = [];
+            document.querySelectorAll('[data-row]').forEach(el => {
+                const rowId = el.dataset.row;
+                let filter = textFilters.find(f => f.rowId === rowId);
+                if (!filter) { filter = { rowId }; textFilters.push(filter); }
+                if (el.classList.contains('filter-col')) filter.col = parseInt(el.value);
+                if (el.classList.contains('filter-val')) filter.val = el.value.trim().toLowerCase();
+            });
+            displayedData = rawData.filter(row => {
+                const passText = textFilters.every(f => !f.val || (row[f.col] || '').toString().toLowerCase().includes(f.val));
+                let passDate = true;
+                if (fromDateVal || toDateVal) {
+                    const cellDate = new Date(row[dateColIndex]);
+                    if (!isNaN(cellDate.getTime())) {
+                        if (fromDateVal && cellDate < new Date(fromDateVal)) passDate = false;
+                        if (toDateVal && cellDate > new Date(toDateVal)) passDate = false;
+                    } else { passDate = false; }
+                }
+                return passText && passDate;
+            });
+            renderTable(displayedData);
+            updateStats();
+        }
+
+        function clearAllFilters() {
+            document.getElementById('fromDate').value = '';
+            document.getElementById('toDate').value = '';
+            document.getElementById('filterRows').innerHTML = '';
+            addFilterRow();
+            displayedData = [...rawData];
+            renderTable(displayedData);
+            updateStats();
+        }
+
+        function renderTable(dataRows) {
+            const head = document.getElementById('tableHead');
+            const body = document.getElementById('tableBody');
+            const visibleHeaders = headers.filter((_, i) => visibleColumns.has(i));
+            head.innerHTML = `<tr><th class="px-4 py-2 text-left font-semibold border">Sl No</th>${visibleHeaders.map(h => `<th class="px-4 py-2 text-left font-semibold border whitespace-nowrap">${escapeHtml(h)}</th>`).join('')}</tr>`;
+            body.innerHTML = dataRows.map((row, index) => {
+                const cells = headers.map((_, i) => visibleColumns.has(i) ? `<td class="px-4 py-2 border">${escapeHtml(row[i] || '')}</td>` : '').join('');
+                return `<tr><td class="px-4 py-2 border text-center font-medium">${index + 1}</td>${cells}</tr>`;
+            }).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('rowCount').textContent = displayedData.length;
+            document.getElementById('totalCount').textContent = rawData.length;
+            document.getElementById('stats').classList.remove('hidden');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const visibleHeaders = headers.filter((_, i) => visibleColumns.has(i));
+            const pdfHeaders = ['Sl No', ...visibleHeaders];
+            const pdfData = displayedData.map((row, index) => [index + 1, ...headers.map((_, i) => visibleColumns.has(i) ? (row[i] || '') : '').filter(v => v !== '')]);
+            doc.autoTable({
+                head: [pdfHeaders],
+                body: pdfData,
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [100, 149, 237] },
+                didDrawPage: (data) => doc.text(`Filtered Report - ${displayedData.length} rows`, 14, 15)
+            });
+            doc.save(`report_${new Date().toISOString().slice(0,10)}.pdf`);
+        }
+
+        /**
+         * NEW: Excel Download Function
+         */
+        function downloadExcel() {
+            if (displayedData.length === 0) return alert("No data to export!");
+
+            // Prepare headers for the spreadsheet
+            const visibleHeaders = headers.filter((_, i) => visibleColumns.has(i));
+            const exportHeaders = ['Sl No', ...visibleHeaders];
+
+            // Prepare row data
+            const exportData = displayedData.map((row, index) => {
+                const filteredRow = [index + 1];
+                headers.forEach((_, i) => {
+                    if (visibleColumns.has(i)) filteredRow.push(row[i] || '');
+                });
+                return filteredRow;
+            });
+
+            // Create a worksheet
+            const worksheet = XLSX.utils.aoa_to_sheet([exportHeaders, ...exportData]);
+
+            // Create a workbook and add the worksheet
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Filtered Results");
+
+            // Write the file
+            XLSX.writeFile(workbook, `sheet_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+    </script>
+</body>
+</html>
