@@ -42,7 +42,7 @@
                 <h3 class="text-lg font-semibold text-blue-800 mb-3">Date Range Filter</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-xs font-medium text-gray-700 mb-1">Date Column</label>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Date Column (e.g., DOB)</label>
                         <select id="dateColIdx" class="block w-full border border-gray-300 rounded-md p-2 text-sm">
                             </select>
                     </div>
@@ -58,12 +58,12 @@
             </div>
 
             <div>
-                <h3 class="text-lg font-semibold text-gray-800 mb-3">Text Filters (AND logic)</h3>
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">Filters (AND logic – contains)</h3>
                 <div id="filterRows" class="space-y-2"></div>
                 <button onclick="addFilterRow()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">+ Add Filter</button>
             </div>
 
-            <div class="flex flex-wrap gap-2 pt-2 border-t pt-6">
+            <div class="flex flex-wrap gap-2 pt-2">
                 <button onclick="applyFilters()" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-medium">Apply Filters</button>
                 <button onclick="clearAllFilters()" class="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 font-medium">Clear All</button>
                 <button onclick="downloadPDF()" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 font-medium">Download PDF</button>
@@ -91,7 +91,9 @@
         async function fetchData() {
             const id = document.getElementById('sheetId').value.trim();
             if (!id) return alert("Please enter a Sheet ID");
+
             const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`;
+
             try {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error("Failed to fetch");
@@ -99,7 +101,7 @@
                 processData(data);
                 document.getElementById('controls').classList.remove('hidden');
             } catch (error) {
-                alert("Error fetching data. Ensure the Sheet ID is correct and Published to Web.");
+                alert("Error fetching data. Ensure the Sheet ID is correct and the sheet is Published to Web as CSV.");
             }
         }
 
@@ -108,12 +110,18 @@
             let currentRow = [];
             let currentField = '';
             let inQuotes = false;
+
             for (let i = 0; i < csvText.length; i++) {
                 const char = csvText[i];
                 const nextChar = csvText[i + 1];
+
                 if (char === '"') {
-                    if (inQuotes && nextChar === '"') { currentField += '"'; i++; } 
-                    else { inQuotes = !inQuotes; }
+                    if (inQuotes && nextChar === '"') {
+                        currentField += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
                 } else if (char === ',' && !inQuotes) {
                     currentRow.push(currentField.trim());
                     currentField = '';
@@ -123,7 +131,9 @@
                     rows.push(currentRow);
                     currentRow = [];
                     currentField = '';
-                } else { currentField += char; }
+                } else {
+                    currentField += char;
+                }
             }
             if (currentField || currentRow.length) {
                 currentRow.push(currentField.trim());
@@ -134,11 +144,16 @@
 
         function processData(csvText) {
             const rows = parseCSV(csvText);
-            if (rows.length === 0) return alert("No data found.");
+            if (rows.length === 0) {
+                alert("No data found in the sheet.");
+                return;
+            }
+
             headers = rows[0];
             rawData = rows.slice(1);
             displayedData = [...rawData];
             visibleColumns = new Set(headers.keys());
+
             initControls();
             renderTable(displayedData);
             updateStats();
@@ -169,7 +184,9 @@
 
         function updateVisibleColumns() {
             visibleColumns.clear();
-            document.querySelectorAll('#columnCheckboxes input:checked').forEach(cb => visibleColumns.add(parseInt(cb.value)));
+            document.querySelectorAll('#columnCheckboxes input:checked').forEach(cb => {
+                visibleColumns.add(parseInt(cb.value));
+            });
             renderTable(displayedData);
         }
 
@@ -188,6 +205,7 @@
         function addFilterRow() {
             const container = document.getElementById('filterRows');
             const rowId = Date.now();
+
             const filterRow = document.createElement('div');
             filterRow.className = 'grid grid-cols-1 md:grid-cols-3 gap-2 items-end p-3 bg-gray-50 rounded-lg border';
             filterRow.id = `filter-row-${rowId}`;
@@ -203,7 +221,9 @@
                     <input type="text" class="filter-val block w-full border border-gray-300 rounded-md p-2 text-sm" data-row="${rowId}" placeholder="Enter filter text...">
                 </div>
                 <div>
-                    <button onclick="removeFilterRow(${rowId})" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Remove</button>
+                    <button onclick="removeFilterRow(${rowId})" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
+                        Remove
+                    </button>
                 </div>
             `;
             container.appendChild(filterRow);
@@ -214,9 +234,22 @@
             if (el) el.remove();
         }
 
+        // Helper to parse DD-MM-YYYY format specifically
+        function parseCustomDate(dateStr) {
+            if (!dateStr) return null;
+            const parts = dateStr.split(/[-/]/);
+            if (parts.length === 3) {
+                const day = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1; 
+                const year = parseInt(parts[2], 10);
+                return new Date(year, month, day);
+            }
+            return new Date(dateStr);
+        }
+
         function applyFilters() {
-            const fromDateVal = document.getElementById('fromDate').value;
-            const toDateVal = document.getElementById('toDate').value;
+            const fromDateInput = document.getElementById('fromDate').value;
+            const toDateInput = document.getElementById('toDate').value;
             const dateColIdx = document.getElementById('dateColIdx').value;
 
             const textFilters = [];
@@ -229,33 +262,33 @@
             });
 
             displayedData = rawData.filter(row => {
-                // 1. Text Filters (AND logic)
+                // 1. Check Text Filters
                 const textMatch = textFilters.every(f => {
                     if (!f.val) return true;
                     return (row[f.col] || '').toString().toLowerCase().includes(f.val);
                 });
 
-                // 2. Date Range Filter
+                // 2. Check Date Range
                 let dateMatch = true;
-                if (dateColIdx !== "" && (fromDateVal || toDateVal)) {
-                    const cellDate = new Date(row[dateColIdx]);
-                    // Check if cell contains a valid date
-                    if (isNaN(cellDate.getTime())) {
+                if (dateColIdx !== "" && (fromDateInput || toDateInput)) {
+                    const cellValue = row[dateColIdx] || '';
+                    const cellDate = parseCustomDate(cellValue);
+
+                    if (!cellDate || isNaN(cellDate.getTime())) {
                         dateMatch = false; 
                     } else {
-                        if (fromDateVal) {
-                            const start = new Date(fromDateVal);
+                        if (fromDateInput) {
+                            const start = new Date(fromDateInput);
                             start.setHours(0,0,0,0);
                             if (cellDate < start) dateMatch = false;
                         }
-                        if (toDateVal) {
-                            const end = new Date(toDateVal);
+                        if (toDateInput) {
+                            const end = new Date(toDateInput);
                             end.setHours(23,59,59,999);
                             if (cellDate > end) dateMatch = false;
                         }
                     }
                 }
-
                 return textMatch && dateMatch;
             });
 
@@ -285,10 +318,15 @@
             ).join('')}</tr>`;
 
             body.innerHTML = dataRows.map((row, index) => {
+                const slNo = index + 1;
                 const cells = headers.map((_, i) => 
                     visibleColumns.has(i) ? `<td class="px-4 py-2 border">${escapeHtml(row[i] || '')}</td>` : ''
                 ).filter(Boolean).join('');
-                return `<tr><td class="px-4 py-2 border text-center font-medium">${index + 1}</td>${cells}</tr>`;
+
+                return `<tr>
+                    <td class="px-4 py-2 border text-center font-medium">${slNo}</td>
+                    ${cells}
+                </tr>`;
             }).join('');
         }
 
@@ -309,18 +347,26 @@
             const doc = new jsPDF('l', 'mm', 'a4');
             const visibleHeaders = headers.filter((_, i) => visibleColumns.has(i));
             const pdfHeaders = ['Sl No', ...visibleHeaders];
+
             const pdfData = displayedData.map((row, index) => {
-                const rowData = headers.map((_, i) => visibleColumns.has(i) ? (row[i] || '') : '').filter(Boolean);
-                return [index + 1, ...rowData];
+                const slNo = index + 1;
+                const rowData = headers.map((_, i) => 
+                    visibleColumns.has(i) ? (row[i] || '') : ''
+                ).filter(Boolean);
+                return [slNo, ...rowData];
             });
+
             doc.autoTable({
                 head: [pdfHeaders],
                 body: pdfData,
-                styles: { fontSize: 8 },
+                styles: { fontSize: 8, cellPadding: 3 },
                 headStyles: { fillColor: [100, 149, 237] },
                 margin: { top: 20 },
-                didDrawPage: (data) => doc.text(`Filtered Report - ${displayedData.length} rows`, 14, 15)
+                didDrawPage: (data) => {
+                    doc.text(`Report - ${displayedData.length} rows`, 14, 15);
+                }
             });
+
             doc.save(`report_${new Date().toISOString().slice(0,10)}.pdf`);
         }
     </script>
